@@ -1,0 +1,121 @@
+#include <arduinoFFT.h>
+#include <FastLED.h>
+
+#define SAMPLES     64
+#define MIC_IN      A0
+#define LED_PIN     2
+#define BRIGHTNESS  150
+#define LED_TYPE    WS2811
+#define COLOR_ORDER GRB
+
+// Bottom matrix (first in LED chain)
+#define xres1 9
+#define yres1 7
+
+// Top matrix (second in LED chain, vertically wired but drawn horizontally)
+#define xres2 10
+#define yres2 5
+
+#define NUM_LEDS    (xres1 * yres1 + xres2 * yres2)
+
+double vReal[SAMPLES];
+double vImag[SAMPLES];
+
+int intensityBottom[xres1] = {0};  // bottom matrix bars
+int intensityTop[yres2] = {0};     // top matrix bars (one bar per row)
+
+CRGB leds[NUM_LEDS];
+ArduinoFFT<double> FFT = ArduinoFFT<double>();
+
+// Mapping for bottom matrix (normal serpentine layout)
+int XY_Bottom(int x, int y) {
+  int flippedY = yres1 - 1 - y;
+  if (flippedY % 2 == 0) {
+    return flippedY * xres1 + x;
+  } else {
+    return flippedY * xres1 + (xres1 - 1 - x);
+  }
+}
+
+// Mapping for top matrix (wired vertically, visualizing bars growing RIGHTWARD)
+int XY_Top(int x, int y) {
+  int row = x; // treated as vertical wiring
+  int col = yres2 - 1 - y; // flip vertically
+  if (row % 2 == 0) {
+    return xres1 * yres1 + row * yres2 + col;
+  } else {
+    return xres1 * yres1 + row * yres2 + (yres2 - 1 - col);
+  }
+}
+
+void setup() {
+  pinMode(MIC_IN, INPUT);
+  Serial.begin(115200);
+  delay(3000); // Startup delay
+  FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
+  FastLED.setBrightness(BRIGHTNESS);
+}
+
+void loop() {
+  getSamples();
+  displayUpdate();
+  FastLED.show();
+}
+
+void getSamples() {
+  for (int i = 0; i < SAMPLES; i++) {
+    vReal[i] = analogRead(MIC_IN);
+    vImag[i] = 0;
+  }
+
+  FFT.windowing(vReal, SAMPLES, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
+  FFT.compute(vReal, vImag, SAMPLES, FFT_FORWARD);
+  FFT.complexToMagnitude(vReal, vImag, SAMPLES);
+
+  // Bottom matrix sensitivity (less sensitive)
+  for (int i = 2; i < xres1 + 2; i++) {
+    int idx = i - 2;
+    double mag = vReal[i];
+    mag = constrain(mag, 0, 1536); // softer range
+    mag = map(mag, 0, 1536, 0, yres1 - 1);
+    intensityBottom[idx] = max((int)mag, intensityBottom[idx] - 1);
+  }
+
+  // Top matrix sensitivity (much less sensitive)
+  for (int i = 2 + xres1; i < 2 + xres1 + yres2 && i < SAMPLES; i++) {
+    int idx = i - (2 + xres1);
+    double mag = vReal[i];
+    mag = constrain(mag, 0, 1024); // even softer
+    mag = map(mag, 0, 1024, 0, xres2 - 1);
+    intensityTop[idx] = max((int)mag, intensityTop[idx] - 1);
+  }
+}
+
+void displayUpdate() {
+  fill_solid(leds, NUM_LEDS, CRGB::Black);
+
+  // Bottom matrix: bars grow upward
+  int color = 0;
+  for (int x = 0; x < xres1; x++) {
+    for (int y = 0; y < yres1; y++) {
+      int index = XY_Bottom(x, y);
+      if (y <= intensityBottom[x]) {
+        leds[index] = CHSV(color, 255, BRIGHTNESS);
+      }
+    }
+    color += 255 / xres1;
+  }
+
+  // Top matrix: bars grow rightward
+  color = 0;
+  for (int y = 0; y < yres2; y++) {
+    for (int x = 0; x < xres2; x++) {
+      int index = XY_Top(x, y);
+      if (x <= intensityTop[y]) {
+        leds[index] = CHSV(color, 255, BRIGHTNESS);
+      }
+    }
+    color += 255 / yres2;
+  }
+}
+
