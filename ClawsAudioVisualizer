@@ -1,0 +1,284 @@
+var song; 
+var heartSize = 20;
+var cols, rows;
+let d = [];
+let max;
+let colors = ["#ff00a8", "#fd59c1", "#ff91cc", "#fbaddd", "#ffe1f1", "#e3ffba", "#dfff6f", "#affb1c", "#7ff90d", "#2ced00"]
+let rings = 3;
+let amplitude;
+
+let video;
+let fontSize = 20;
+let charWidth, charHeight;
+let asciiCols, asciiRows;
+let rainDrops = [];
+
+// Song Lyrics
+let lyrics = `I like, I like, I like, I like
+I like, I like, I like, I like, I like, I like
+I like, I like, I like
+
+Like your mind, like your smile
+Like your eyes, I could die
+Aeroplane, you are so fly
+Singin' songs by Jeremih
+Party time, hop inside (Woo)
+We're so high, roller coaster ride
+Diamond bright, kiss me right, yeah (Mwah)
+That's so nice (Yeah)
+
+I like, I like, I like, I like, I like everything about you
+I like, I like, I like, I like, I like everything about you
+I like, I like, I like, I like, I like everything about you
+I like, I like, I like, I like, I like everything about you
+
+So, don't you hold me back
+'Cause I know when I know, I don't wanna be alone
+Don't you hold me back
+'Cause I know when I know, I wanna go
+
+I'm not shy, make you sigh
+Slip and slide up my thighs (Ah)
+Juicy just like clementines
+Sorry if I make you cry
+Party time, hop inside
+We're so high, roller coaster ride
+Gemini, switchin' sides
+Yeah, that's so nice (Woo)
+
+I like, I like, I like, I like, I like everything about you
+I like, I like, I like, I like, I like everything about you
+I like, I like, I like, I like, I like everything about you
+I like, I like, I like, I like, I like everything about you
+
+So, don't you hold me back
+Cause I know when I know, I don't wanna be alone
+Don't you hold me back
+Cause I know when I know, I wanna go
+
+I, I, I, I, I like everything about you
+I, I, I, I, I, everything about you
+Everything about you
+Every (Yeah-yeah-yeah-yeah-yeah)
+
+Everything about you
+Everything about you
+Everything about you, yeah
+Everything about you
+Everything`
+;
+
+let lyricChars = [];
+
+function preload(){
+    song = loadSound("claws.mp3", 
+      () => console.log("Audio loaded successfully"),
+      (err) => console.log("Error loading audio:", err)
+    );
+}
+
+function setup() {
+  createCanvas(1500, 1000);
+  
+  // Heart background setup
+  cols = floor(width/heartSize); 
+  rows = floor(height/heartSize);
+  
+  amplitude = new p5.Amplitude();
+  
+  max = sqrt(pow(width/2, 2) + pow(height/2, 2));
+  
+
+  let heartScale = min(width, height) / 6; 
+  
+  for(let i=0; i<cols; i++) {
+    d[i] = [];
+    for (let j=0; j<rows; j++) {
+      let x = i * heartSize + heartSize/2;
+      let y = j * heartSize + heartSize/2; 
+     
+      d[i][j] = heartDistance(x, y, width/2, height/2, heartScale);
+    }
+  }
+  
+  // Lyrics convert to character array
+  lyricChars = lyrics.split('');
+  lyricChars = lyricChars.filter(char => char !== '\n'); // Remove newlines
+  
+  // Text rain setup
+  textFont('monospace');
+  textSize(fontSize);
+  textStyle(BOLD); // Make text bold
+  textAlign(CENTER, CENTER);
+  
+  charWidth = textWidth('W');
+  charHeight = fontSize * 1.2;
+  
+  // Calculate columns 
+  rainCols = floor(width / (charWidth * 3)); 
+  
+  // Initialize rain drops 
+  for(let i = 0; i < rainCols; i++) {
+    rainDrops[i] = [];
+    let numDrops = 1;
+    for(let j = 0; j < numDrops; j++) {
+      rainDrops[i].push({
+        y: random(-height * 2, 0),
+        speed: random(1, 5),
+        charIndex: floor(random(lyricChars.length)),
+        trailLength: floor(random(15, 30)),
+        size: random([20, 25, 35, 45, 55]) 
+      });
+    }
+  }
+}
+
+function draw() {
+  // Draw heart background
+  background(220);
+  noStroke();
+  
+  let level = amplitude.getLevel();
+  
+  for(let i=0; i<cols; i++) {
+    for (let j=0; j<rows; j++) {
+      let x = i * heartSize + heartSize/2;
+      let y = j * heartSize + heartSize/2; 
+      let index = floor(map(abs(d[i][j]), 0, max, 0, colors.length * rings));
+      
+      let c = colors[index % colors.length];
+      fill(c);
+      
+      heart(x, y, heartSize);
+      
+      d[i][j] -= level * 50;
+      
+      if(d[i][j] < -max) {
+        d[i][j] = max; 
+      }
+    }
+  }
+  
+  // Start button/is song playing
+  if(!song || !song.isPlaying()) {
+    fill(0);
+    textSize(24);
+    textAlign(CENTER, CENTER);
+    text("Press space to start", width/2, height/2);
+    textSize(fontSize); // Reset
+    textAlign(CENTER, CENTER);
+  }
+  
+  // Draw text rain
+  for(let i = 0; i < rainCols; i++) {
+    for(let raindrop of rainDrops[i]) {
+      // Set size for this raindrop
+      textSize(raindrop.size);
+      
+      // Draw trail of characters
+      for(let t = 0; t < raindrop.trailLength; t++) {
+        let yPos = raindrop.y - t * charHeight * (raindrop.size / fontSize);
+        
+        if(yPos > -charHeight && yPos < height + charHeight) {
+          // Get character from lyrics
+          let charIdx = (raindrop.charIndex + t) % lyricChars.length;
+          let char = lyricChars[charIdx];
+          
+          // Fade effect, solid black at front with a fading trail
+          let alpha = map(t, 0, raindrop.trailLength, 255, 0);
+          
+          // Black text with fade
+          fill(0, 0, 0, alpha);
+          
+          text(char, i * charWidth * 3 + charWidth/2, yPos); // Multiply spacing by 3
+        }
+      }
+      
+      // Update position 
+      raindrop.y += raindrop.speed * (1 + level * 5); 
+      
+      // Cycle through lyrics
+      if(frameCount % 2 === 0) {
+        raindrop.charIndex = (raindrop.charIndex + 1) % lyricChars.length;
+      }
+      
+      // Reset when off screen
+      if(raindrop.y > height + 200) {
+        raindrop.y = -random(200, 800);
+        raindrop.speed = random(1, 5); // Slower speed
+        raindrop.charIndex = floor(random(lyricChars.length));
+        raindrop.trailLength = floor(random(15, 30));
+        raindrop.size = random([20, 25, 30, 45, 55]); 
+      }
+    }
+  }
+}
+
+function mouseClicked(){
+    if (mouseX > 0 && mouseX < width && mouseY > 0 &&  
+        mouseY < height){
+    let fs = fullscreen();
+    fullscreen(!fs);
+    }
+}
+
+function keyPressed(){
+  if (key === ' ' || keyCode === 32) {
+    if (song && song.isPlaying()) {
+      song.pause();
+    } else {
+      if(song) {
+        song.play();
+      }
+    }
+    return false;
+  }
+}
+
+function heart(x, y, s) {
+  beginShape();
+  vertex(x, y);
+  bezierVertex(x - s / 2, y - s / 2, x - s, y + s / 3, x, y + s);
+  bezierVertex(x + s, y + s / 3, x + s / 2, y - s / 2, x, y);
+  endShape(CLOSE);
+}
+
+// Calculate distance from a point to the edge of a heart shape
+function heartDistance(px, py, centerX, centerY, scale) {
+  // Translate and normalize point to heart-centered coordinates
+  let x = (px - centerX) / scale;
+  let y = (py - centerY) / scale;
+  
+  // Heart points down
+  y = -y;
+  
+  // Heart implicit equation: (x^2 + y^2 - 1)^3 - x^2 * y^3 = 0
+  
+  // For each point, sample radially outward to find the heart boundary
+  let angle = atan2(y, x);
+  
+  // Binary search for the heart boundary in this direction
+  let minR = 0;
+  let maxR = 3;
+  let steps = 20;
+  
+  for(let i = 0; i < steps; i++) {
+    let r = (minR + maxR) / 2;
+    let testX = r * cos(angle);
+    let testY = r * sin(angle);
+    
+    // Evaluate heart equation
+    let val = pow(testX * testX + testY * testY - 1, 3) - testX * testX * pow(testY, 3);
+    
+    if(val < 0) {
+      minR = r;
+    } else {
+      maxR = r;
+    }
+  }
+  
+  let heartRadius = (minR + maxR) / 2;
+  let currentRadius = dist(0, 0, x, y);
+  
+  return abs(currentRadius - heartRadius) * scale;
+}
